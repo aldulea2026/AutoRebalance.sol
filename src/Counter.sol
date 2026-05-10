@@ -1,87 +1,57 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.24;
 
-import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
+import {BaseHook} from "v4-periphery/BaseHook.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {Hooks} from "v4-core/libraries/Hooks.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
 
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager, SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
-
-contract Counter is BaseHook {
-    using PoolIdLibrary for PoolKey;
-
-    // NOTE: ---------------------------------------------------------
-    // state variables should typically be unique to a pool
-    // a single hook contract should be able to service multiple pools
-    // ---------------------------------------------------------------
-
-    mapping(PoolId => uint256 count) public beforeSwapCount;
-    mapping(PoolId => uint256 count) public afterSwapCount;
-
-    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
-    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+contract SmartLiquidityHook is BaseHook {
+    
+    // تحديد نسبة الـ 5% من خلال الـ Ticks (تقريبياً)
+    // في Uniswap v4، التغير بنسبة 1% يعادل تقريباً 100 Tick (حسب الـ TickSpacing)
+    int24 public constant RANGE_WIDTH = 500; 
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
 
+    // تفعيل خاصية "بعد التبديل" فقط
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
-            afterInitialize: false,
-            beforeAddLiquidity: true,
+            afterInitialize: true,
+            beforeAddLiquidity: false,
             afterAddLiquidity: false,
-            beforeRemoveLiquidity: true,
+            beforeRemoveLiquidity: false,
             afterRemoveLiquidity: false,
-            beforeSwap: true,
-            afterSwap: true,
+            beforeSwap: false,
+            afterSwap: true, // تفعيل الرصد بعد كل عملية تبديل
             beforeDonate: false,
             afterDonate: false,
-            beforeSwapReturnDelta: false,
-            afterSwapReturnDelta: false,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
+            beforeNoOp: false,
+            afterNoOp: false
         });
     }
 
-    // -----------------------------------------------
-    // NOTE: see IHooks.sol for function documentation
-    // -----------------------------------------------
-
-    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
+    function afterSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, BeforeSwapDelta, bytes calldata)
+        external override returns (bytes4, int128) 
     {
-        beforeSwapCount[key.toId()]++;
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-    }
+        // 1. الحصول على السعر الحالي من مدير الحوض
+        (, int24 currentTick, , ) = poolManager.getSlot0(key.toId());
 
-    function _afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
-        internal
-        override
-        returns (bytes4, int128)
-    {
-        afterSwapCount[key.toId()]++;
+        // 2. منطق إعادة التمركز (Rebalance Logic)
+        // ملاحظة: التنفيذ الفعلي يتطلب صلاحيات لإدارة السيولة (Manager Account)
+        rebalance(key, currentTick);
+
         return (BaseHook.afterSwap.selector, 0);
     }
 
-    function _beforeAddLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        beforeAddLiquidityCount[key.toId()]++;
-        return BaseHook.beforeAddLiquidity.selector;
-    }
+    function rebalance(PoolKey calldata key, int24 currentTick) internal {
+        // حساب الحدود الجديدة بناءً على تمركز 5%
+        int24 lowerTick = currentTick - (RANGE_WIDTH / 2);
+        int24 upperTick = currentTick + (RANGE_WIDTH / 2);
 
-    function _beforeRemoveLiquidity(address, PoolKey calldata key, ModifyLiquidityParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4)
-    {
-        beforeRemoveLiquidityCount[key.toId()]++;
-        return BaseHook.beforeRemoveLiquidity.selector;
+        // هنا يتم استدعاء وظائف Burn للقديم و Mint للجديد
+        // تحذير: عمليات إعادة التمركز داخل الـ Hook مباشرة مكلفة جداً من حيث الغاز
     }
 }
