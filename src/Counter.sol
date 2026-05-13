@@ -1,12 +1,5 @@
 import {IPoolManager} from "https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IPoolManager.sol";
 import {Hooks} from "https://github.com/Uniswap/v4-core/blob/main/src/libraries/Hooks.sol";
-
-contract SmartLiquidityHook is BaseHook {
-    // نطاق 5% يعادل تقريباً 500 tick في أحواض الـ 0.01 tick spacing
-    int24 public constant RANGE_WIDTH = 500; 
-
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
-
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
