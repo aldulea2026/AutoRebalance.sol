@@ -1,11 +1,5 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
-
-import {BaseHook} from "v4-periphery/BaseHook.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {BeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
+import {IPoolManager} from "https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IPoolManager.sol";
+import {Hooks} from "https://github.com/Uniswap/v4-core/blob/main/src/libraries/Hooks.sol";
 
 contract SmartLiquidityHook is BaseHook {
     // نطاق 5% يعادل تقريباً 500 tick في أحواض الـ 0.01 tick spacing
